@@ -1,0 +1,1 @@
+{"type":"record","name":"MarketData.StartUnderlyingMonitorRequest","fields":[{"name":"Symbol","type":"string"},{"name":"SymbolType","type":"string"},{"name":"RequestedSubscriptionId","type":"int"}]}

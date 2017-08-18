@@ -1,0 +1,1 @@
+{"type":"record","name":"MarketData.CommandAcknowledgement","fields":[{"name":"SubscriptionId","type":"int"}]}

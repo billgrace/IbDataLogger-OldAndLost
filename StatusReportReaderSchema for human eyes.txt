@@ -1,0 +1,22 @@
+{"type":"record",
+ "name":"MarketData.StatusReport",
+ "fields":[
+ 	{"name":"MarketDataType","type":{"type":"enum",
+ 										"name":"IbData.MarketDataTimingType",
+ 										"symbols":["NotSpecified",
+ 													"Live",
+ 													"Frozen",
+ 													"Delayed",
+ 													"DelayedFrozen"]}},
+ 	{"name":"TwsPreferredClientId","type":"int"},
+ 	{"name":"TwsPortNumber","type":"int"},
+ 	{"name":"IbDataTapConnectionStatus","type":{"type":"enum",
+ 													"name":"IbData.ConnectionStatus",
+ 													"symbols":["NotSpecified",
+ 																"ConnectionAttemptFailed",
+ 																"Connected",
+ 																"ConnectionClosed"]}},
+ 	{"name":"NumberOfIdsOnMonitorList","type":"int"},
+ 	{"name":"DiagnosticInteger","type":"int"}
+ ]
+}

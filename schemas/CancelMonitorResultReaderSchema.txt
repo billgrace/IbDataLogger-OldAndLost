@@ -1,0 +1,1 @@
+{"type":"record","name":"MarketData.CancelMonitorResult","fields":[{"name":"RequestSuccessCode","type":{"type":"enum","name":"IbData.CancelRequestResultReturnCode","symbols":["NotSpecified","Success","IdNotFound"]}},{"name":"SubscriptionId","type":"int"}]}

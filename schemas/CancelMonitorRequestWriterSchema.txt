@@ -1,0 +1,1 @@
+{"type":"record","name":"MarketData.CancelMonitorRequest","fields":[{"name":"SubscriptionIdToCancel","type":"int"}]}
