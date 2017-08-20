@@ -1,8 +1,8 @@
 #!/usr/local/bin/python3
-
+#NOTE TO SELF... GitSavvy => Shift Command P, then "git:add", "git:commit", "git:push"...
+#... shortcut keys - refer to https://github.com/divmain/GitSavvy/issues/222
 import sys
 import time
-# import multiprocessing
 import threading
 import socket
 import avro
@@ -11,13 +11,9 @@ import avro.io
 import tkinter
 import datetime
 
-
-#a second change....
-
-
 def Main():
 	global BackgroundRunning
-	global GlobalVariable
+	global DataTapStatus
 	#I - Set up program operation
 	# A - set up communications with IbDataTap
 	ReadSchemas()
@@ -58,17 +54,20 @@ def Main():
 	# D - terminate program
 
 	BackgroundRunning = True
-	GlobalVariable = "InitialGlobalVariable"
-	AppThr = threading.Thread(target=AppThread, args=("First",))
-	AppThr.start()
-	AppThr = threading.Thread(target=AppThread, args=("Second",))
-	AppThr.start()
-
-
+	DataTapStatus = {
+		"MarketDataTiming": "NotSpecified",
+		"TwsPreferredClientId": 0,
+		"TwsPortNumber": 0,
+		"ConnectionStatus": "NotSpecified",
+		"NumberOfMonitorsOnList": 0,
+		"DiagnosticInteger": 0
+	}
+	MonitorManagerThr = threading.Thread(target=MonitorManagerThread)
+	MonitorManagerThr.start()
 	PrepareGui()
 	UpdateGui()
 	GuiWindow.mainloop()
-	print("Back from GuiWindow.mainloop() and 'BackgroundRunning' is: " + str(BackgroundRunning) + " and #threads is " + str(threading.active_count()))
+	BackgroundRunning = False
 
 def ReadSchemas():
 	global CancelMonitorRequestWriterSchema
@@ -148,49 +147,81 @@ def	PrepareProgramEnd():
 	StartSecond = StartTime.second
 	StartSecondString = format(StartSecond, '02d')
 	StartTimeString = StartHourString + ":" + StartMinuteString + ":" + StartSecondString
-	TimeToEndBackground = StartTime + datetime.timedelta(seconds=5)
-	TimeToEndGui = StartTime + datetime.timedelta(seconds=6)
+	TimeToEndBackground = StartTime + datetime.timedelta(hours=10)
+	TimeToEndGui = StartTime + datetime.timedelta(hours=10, minutes=30)
 
 def	PrepareDiskStorage():
 	global ExecutionPath
 	global DataStoragePath
 
 def PrepareGui():
+	global DataTapStatus
 	global GuiWindow
+	global GuiDataTapStatusText
 	global GuiMessageLabel
+	global GuiThreadCountLabel
 	global GuiExitButton
-	global GuiTestButton
 	GuiWindow = tkinter.Tk()
 	GuiWindow.geometry("800x600+100+100")
+	GuiWindow.configure(background="cyan")
 	GuiWindow.resizable(True, True)
-	GuiMessageLabel = tkinter.Label(GuiWindow, text="Initial GuiMessageLabel text")
-	GuiMessageLabel.pack()
-	GuiTestButton = tkinter.Button(GuiWindow, text="Click to test", command=TestButtonClick)
-	GuiTestButton.pack()
+	GuiDataTapStatusText = tkinter.Text(GuiWindow, height=6, width=50)
+	GuiDataTapStatusText.place(anchor="w", relx=0.1, rely=0.5)
+	GuiMessageLabel = tkinter.Label(GuiWindow, text="Initial GuiMessageLabel text",
+												fg="red", bg="green",
+												font=("Arial","20","italic"),
+												relief="sunken")
+	GuiMessageLabel.place(anchor="nw", relx=0.1,rely=0.9,relwidth=0.7, relheight=0.07)
+	GuiThreadCountLabel = tkinter.Label(GuiWindow, text="Thread count:")
+	GuiThreadCountLabel.place(anchor="nw", relx=0.1, rely=0.1)
+	GuiExitButton = tkinter.Button(GuiWindow, text="Exit", command=ExitGui)
+	GuiExitButton.place(anchor="se", relx=0.95, rely=0.95)
 
 def UpdateGui():
-	GuiMessageLabel.configure(text="# of threads: " + str(threading.active_count()))
+	GuiDataTapStatusText.delete("1.0", "end")
+	GuiDataTapStatusText.insert("end", "MarketDataTiming: " + DataTapStatus["MarketDataTiming"] +
+									"\nTwsPreferredClientId: " + str(DataTapStatus["TwsPreferredClientId"]) +
+									"\nTwsPortNumber: " + str(DataTapStatus["TwsPortNumber"]) +
+									"\nConnectionStatus: " + DataTapStatus["ConnectionStatus"] +
+									"\nNumberOfMonitorsOnList: " + str(DataTapStatus["NumberOfMonitorsOnList"]) +
+									"\nDiagnosticInteger: " + str(DataTapStatus["DiagnosticInteger"]))
+	GuiThreadCountLabel.configure(text="Thread count: " + str(threading.active_count()))
 	if datetime.datetime.now() > TimeToEndGui:
 		GuiWindow.destroy()
 	else:
 		GuiWindow.after(1000, UpdateGui)
 
-def AppThread(MyArgument):
+def ExitGui():
 	global BackgroundRunning
-	LocalVariable = MyArgument
+	BackgroundRunning = False
+	GuiWindow.destroy()
+
+def MonitorManagerThread():
+	global BackgroundRunning
+	UnderlyingThread = threading.Thread(target=MonitorUnderlyingThread)
+	UnderlyingThread.start()
 	while BackgroundRunning:
 		if datetime.datetime.now() > TimeToEndBackground:
 			BackgroundRunning = False
 		else:
-			print("BackgroundRunning: " + format(BackgroundRunning) + ", MyArgument: " + LocalVariable + ", GlobalVariable: " + GlobalVariable)
+			# ContractDescriptorArray = 
+			time.sleep(2.0)
+
+def MonitorUnderlyingThread(symbol="SPX", type="IND"):
+	while BackgroundRunning:
+		time.sleep(2.0)
+
+def MonitorContractThread(MyContract):
+	MyStrikePrice = MyContract.MyStrikePrice
+	MyExpiration = MyContract.Expiration
+	MyRight = MyContract.Right
+	while BackgroundRunning:
 			time.sleep(0.5)
 
 def TestButtonClick():
 	print("Clicked")
-	global GlobalVariable
-	GlobalVariable = "Clicked"
 
-def StatusRequest(IpAddress):
+def GetDataTapStatus():
 	if(DistantIpAddress == IpAddress):
 		print("Distant Status.")
 	else:
