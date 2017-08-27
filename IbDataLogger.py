@@ -1,15 +1,19 @@
 #!/usr/local/bin/python3
 #NOTE TO SELF... GitSavvy => Shift Command P, then "git:add", "git:commit", "git:push"...
 #... shortcut keys - refer to https://github.com/divmain/GitSavvy/issues/222
+#... "pip install <la da>" => "sudo -H pip3 install <la da>"
 import sys
 import time
 import threading
 import socket
-import avro
+import io
+import json
+import avro.datafile
 import avro.schema
 import avro.io
 import tkinter
 import datetime
+from enum import Enum
 
 def Main():
 	global BackgroundRunning
@@ -66,7 +70,12 @@ def Main():
 	MonitorManagerThr.start()
 	PrepareGui()
 	UpdateGui()
-	GuiWindow.mainloop()
+
+	#Debug!!!
+	GetDataTapStatus()
+#	GuiWindow.mainloop()
+	#Debug!!!
+
 	BackgroundRunning = False
 
 def ReadSchemas():
@@ -80,16 +89,16 @@ def ReadSchemas():
 	global StartMonitorResultReaderSchema
 	global StartUnderlyingMonitorRequestWriterSchema
 	global StatusReportReaderSchema
-	CancelMonitorRequestWriterSchema = avro.schema.parse(open("schemas/CancelMonitorRequestWriterSchema.txt").read())
-	CancelMonitorResultReaderSchema = avro.schema.parse(open("schemas/CancelMonitorResultReaderSchema.txt").read())
-	CommandAcknowledgementReaderSchema = avro.schema.parse(open("schemas/CommandAcknowledgementReaderSchema.txt").read())
-	ControlCommandWriterSchema = avro.schema.parse(open("schemas/ControlCommandWriterSchema.txt").read())
-	MonitorDataReaderSchema = avro.schema.parse(open("schemas/MonitorDataReaderSchema.txt").read())
-	ReadMonitorRequestWriterSchema = avro.schema.parse(open("schemas/ReadMonitorRequestWriterSchema.txt").read())
-	StartContractMonitorRequestWriterSchema = avro.schema.parse(open("schemas/StartContractMonitorRequestWriterSchema.txt").read())
-	StartCMonitorResultReaderSchema = avro.schema.parse(open("schemas/StartMonitorResultReaderSchema.txt").read())
-	StartUnderlyingMonitorRequestWriterSchema = avro.schema.parse(open("schemas/StartUnderlyingMonitorRequestWriterSchema.txt").read())
-	StatusReportReaderSchema = avro.schema.parse(open("schemas/StatusReportReaderSchema.txt").read())
+	CancelMonitorRequestWriterSchema = avro.schema.Parse(open("schemas/CancelMonitorRequestWriterSchema.txt").read())
+	CancelMonitorResultReaderSchema = avro.schema.Parse(open("schemas/CancelMonitorResultReaderSchema.txt").read())
+	CommandAcknowledgementReaderSchema = avro.schema.Parse(open("schemas/CommandAcknowledgementReaderSchema.txt").read())
+	ControlCommandWriterSchema = avro.schema.Parse(open("schemas/ControlCommandWriterSchema.txt").read())
+	MonitorDataReaderSchema = avro.schema.Parse(open("schemas/MonitorDataReaderSchema.txt").read())
+	ReadMonitorRequestWriterSchema = avro.schema.Parse(open("schemas/ReadMonitorRequestWriterSchema.txt").read())
+	StartContractMonitorRequestWriterSchema = avro.schema.Parse(open("schemas/StartContractMonitorRequestWriterSchema.txt").read())
+	StartCMonitorResultReaderSchema = avro.schema.Parse(open("schemas/StartMonitorResultReaderSchema.txt").read())
+	StartUnderlyingMonitorRequestWriterSchema = avro.schema.Parse(open("schemas/StartUnderlyingMonitorRequestWriterSchema.txt").read())
+	StatusReportReaderSchema = avro.schema.Parse(open("schemas/StatusReportReaderSchema.txt").read())
 
 def PrepareConnectionParameters():
 	global TwsClientId
@@ -155,18 +164,16 @@ def	PrepareDiskStorage():
 	global DataStoragePath
 
 def PrepareGui():
-	global DataTapStatus
 	global GuiWindow
-	global GuiDataTapStatusText
 	global GuiMessageLabel
 	global GuiThreadCountLabel
+	global GuiDataTapStatusText
 	global GuiExitButton
+	global GuiTestButton
 	GuiWindow = tkinter.Tk()
 	GuiWindow.geometry("800x600+100+100")
 	GuiWindow.configure(background="cyan")
 	GuiWindow.resizable(True, True)
-	GuiDataTapStatusText = tkinter.Text(GuiWindow, height=6, width=50)
-	GuiDataTapStatusText.place(anchor="w", relx=0.1, rely=0.5)
 	GuiMessageLabel = tkinter.Label(GuiWindow, text="Initial GuiMessageLabel text",
 												fg="red", bg="green",
 												font=("Arial","20","italic"),
@@ -174,8 +181,15 @@ def PrepareGui():
 	GuiMessageLabel.place(anchor="nw", relx=0.1,rely=0.9,relwidth=0.7, relheight=0.07)
 	GuiThreadCountLabel = tkinter.Label(GuiWindow, text="Thread count:")
 	GuiThreadCountLabel.place(anchor="nw", relx=0.1, rely=0.1)
+	GuiDataTapStatusText = tkinter.Text(GuiWindow, height=6, width=50)
+	GuiDataTapStatusText.place(anchor="w", relx=0.1, rely=0.5)
 	GuiExitButton = tkinter.Button(GuiWindow, text="Exit", command=ExitGui)
 	GuiExitButton.place(anchor="se", relx=0.95, rely=0.95)
+	GuiTestButton = tkinter.Button(GuiWindow, text="Test", command=TestFunction)
+	GuiTestButton.place(anchor="sw", relx=0.03, rely=0.95)
+
+def TestFunction():
+	GetDataTapStatus()
 
 def UpdateGui():
 	GuiDataTapStatusText.delete("1.0", "end")
@@ -221,42 +235,360 @@ def MonitorContractThread(MyContract):
 def TestButtonClick():
 	print("Clicked")
 
-def GetDataTapStatus():
-	if(DistantIpAddress == IpAddress):
-		print("Distant Status.")
+class SessionType(Enum):
+	NotSpecified = 0
+	StatusControl = 1
+	Monitor = 2
+
+class PacketTask(Enum):
+	NotSpecified = 0
+	ReadStatus = 1
+	ControlCommand = 2
+	CommandAcknowledge = 3
+	StartUnderlying = 4
+	StartOption = 5
+	ReadMonitor = 6
+	CancelMonitor = 7
+	EndSession = 8
+
+class OperatingModes(Enum):
+	Development = 0
+	Production = 1
+
+class StartRequestResultReturnCode(Enum):
+	NotSpecified = 0
+	Success = 1
+	IdAlreadyInUse = 2
+	UnableToConnectToIB = 3
+
+class CancelRequestResultReturnCode(Enum):
+	NotSpecified = 0
+	Success = 1
+	IdNotFound = 2
+
+class RequestedMonitorStatus(Enum):
+	NotSpecified = 0
+	Pending = 1
+	Active = 2
+	RejectedByIB = 3
+
+class ReadRequestResultReturnCode(Enum):
+	NotSpecified = 0
+	Success = 1
+	IdNotOnActiveList = 2
+
+class CommandType(Enum):
+	NotSpecified = 0
+	SetConnectionParameters = 1
+	ConnectToTws = 2
+	DisconnectFromTws = 3
+
+class MarketDataTimingType(Enum):
+	NotSpecified = 0
+	Live = 1
+	Frozen = 2
+	Delayed = 3
+	DelayedFrozen = 4
+
+class ConnectionStatus(Enum):
+	NotSpecified = 0
+	ConnectionAttemptFailed = 1
+	Connected = 2
+	ConnectionClosed = 3
+
+class ExpirationDateClass(dict):
+	def __init__(self, *args, **kwargs):
+		self['year'] = 1
+		self['month'] = 1
+		self['day'] = 2016
+
+class StartContractMonitorRequestClass(dict):
+	def __init__(self, *args, **kwargs):
+		ed = ExpirationDateClass()
+		self['Symbol'] = ''
+		self['ExpirationDate'] = ed
+		self['ContractRight'] = ''
+		self['StrikePrice'] = 1.0
+		self['RequestedSubscriptionId'] = 0
+
+class StartMonitorResultClass(dict):
+	def __init__(self, *args, **kwargs):
+		self['RequestSuccessCode'] = StartRequestResultReturnCode['NotSpecified'].name
+		self['RequestErrorMessage'] = ''
+		self['AssignedSubscriptionId'] = 0
+		self['ThisIsTheUnderlying'] = False
+
+class CancelMonitorRequestClass(dict):
+	def __init__(self, *args, **kwargs):
+		self['SubscriptionIdToCancel'] = 0
+
+class CancelMonitorResultClass(dict):
+	def __init__(self, *args, **kwargs):
+		self['RequestSuccessCode'] = CancelRequestResultReturnCode['NotSpecified'].name
+		self['SubscriptionId'] = 0
+
+class ReadMonitorRequestClass(dict):
+	def __init__(self, *args, **kwargs):
+		self['SubscriptionIdToRead'] = 0
+		self['SequenceNumber'] = 0
+
+class OptionCompStructureClass(dict):
+	def __init__(self, *args, **kwargs):
+		self['Price'] = 0.0
+		self['Size'] = 0
+		self['ImpliedVolatility'] = 0.0
+		self['Delta'] = 0.0
+		self['Theta'] = 0.0
+		self['Gamma'] = 0.0
+		self['Vega'] = 0.0
+
+class MonitorDataClass(dict):
+	def __init__(self, *args, **kwargs):
+		ed = ExpirationDateClass()
+		aoc = OptionCompStructureClass()
+		boc = OptionCompStructureClass()
+		loc = OptionCompStructureClass()
+		moc = OptionCompStructureClass()
+		self['MonitorStatus'] = RequestedMonitorStatus['].NotSpecified'].name
+		self['RequestSuccessCode'] = ReadRequestResultReturnCode['NotSpecified'].name
+		self['SequenceNumber'] = 0
+		self['MonitorStartMilliseconds'] = 0
+		self['MonitorLastUpdateMilliseconds'] = 0
+		self['MonitorUpdateCount'] = 0
+		self['Symbol'] = ''
+		self['ExpirationDate'] = ed
+		self['ContractRight'] = ''
+		self['StrikePrice'] = 0.0
+		self['SubscriptionId'] = 0
+		self['Ask'] = aoc
+		self['Bid'] = boc
+		self['Last'] = loc
+		self['Model'] = moc
+		self['Volume'] = 0
+		self['TimeStamp'] = ''
+		self['Open'] = 0.0
+		self['High'] = 0.0
+		self['Low'] = 0.0
+		self['Close'] = 0.0
+
+class StartUnderlyingMonitorRequestClass(dict):
+	def __init__(self, *args, **kwargs):
+		self['Symbol'] = ''
+		self['SymbolType'] = ''
+		self['RequestedSubscriptionId'] = 0
+
+
+class ControlCommandClass(dict):
+	def __init__(self, *args, **kwargs):
+		self['Command'] = CommandType['NotSpecified'].name
+		self['IntegerParameter'] = 0
+		self['IntegerParameter2'] = 0
+		self['LongParameter'] = 0
+		self['DoubleParameter'] =  0.0
+		self['BoolParameter'] = False
+		self['StringParameter'] = ''
+		self['MarketDataType'] = MarketDataTimingType['NotSpecified'].name
+
+class CommandAcknowledgementClass(dict):
+	def __init__(self, *args, **kwargs):
+		self['SubscriptionId'] = 0
+
+class StatusReportClass(dict):
+	def __init__(self, *args, **kwargs):
+		self['MarketDataType'] = MarketDataTimingType['NotSpecified'].name
+		self['TwsPreferredCliendId'] = 0
+		self['TwsPortNumber'] = 0
+		self['IbConnectionStatus'] = ConnectionStatus['NotSpecified'].name
+		self['NumberOfIdsOnMonitorList'] = 0
+		self['DiagnosticInteger'] = 0
+
+
+def ConnectToTws():
+	try:
+		OutgoingBuffer = io.BytesIO()
+		PhonyCommand = {'Command':CommandType['ConnectToTws'].name,
+						'IntegerParameter':1,
+						'IntegerParameter2':7438,
+						'LongParameter':123,
+						'DoubleParameter':2.0,
+						'BoolParameter':True,
+						'StringParameter':'Hi!',
+						'MarketDataType':MarketDataTimingType['Live'].name}
+		AvroSerializationBuffer = io.BytesIO()
+		writer = avro.datafile.DataFileWriter(AvroSerializationBuffer, avro.io.DatumWriter(), ControlCommandWriterSchema)
+		writer.append(PhonyCommand)
+		writer.flush()
+		AvroSerializationBuffer.seek(0)
+		PacketDataBuffer = io.BytesIO()
+		PacketDataBuffer = AvroSerializationBuffer.read()
+		PacketLengthBuffer = (16 + len(PacketDataBuffer)).to_bytes(8, byteorder='little')
+		SessionTypeBuffer = (SessionType['StatusControl'].value).to_bytes(4, byteorder='little')
+		PacketTaskBuffer = (PacketTask['ControlCommand'].value).to_bytes(4, byteorder='little')
+		OutgoingBuffer = PacketLengthBuffer + SessionTypeBuffer + PacketTaskBuffer + PacketDataBuffer
+		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		s.connect((DataTapIpAddress, DataTapIpPortNumber))
+		s.send(OutgoingBuffer)
+		PacketLength = s.recv(8)
+		ReceivedSessionType = s.recv(4)
+		ReceivedPacketTask = s.recv(4)
+		IncomingPacket = s.recv(1024)
+		IncomingAvro = IncomingPacket
+		ByteBufferAvro = io.BytesIO(IncomingAvro)
+		reader = avro.datafile.DataFileReader(ByteBufferAvro, avro.io.DatumReader())
+		for datum in reader:
+			print('datum: ' + str(datum))
+			print('datum[SubscriptionId]: ' + str(datum['SubscriptionId']))
+		reader.close()
+		s.close()
+
+	except Exception as e:
+		LogError('Exception in ConnectToTws: ' + str(e))
+
+def GetDataTapStatus(): 
+	#DevNote: the TCP packet for "readstatus" is 16 bytes long:
+	# first 8 bytes are the total packet length: 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	# the second 4 bytes are the "SessionType" (StatusControl): 0x01, 0x00, 0x00, 0x00
+	# and the last 4 bytes are the "PacketTask" (ReadStatus): 0x01, 0x00, 0x00, 0x00
+	# making the entire TCP frame on the wire: 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00
+	#This is the minimum length a TCP/IP packet to or from the IbDataLink can be: 8 bytes giving
+	# total packet length, 4 bytes encoding the session type and 4 bytes encoding the
+	# packet task (which is essentially a session sub-type). The length of the "packet
+	# contents" in this case is zero. The response containing the status report has
+	# all 16 of the above bytes PLUS a packet content of the AVRO-serialized status report
+	# so it has a total length of 23 bytes.
+	global GuiMessageLabel
+	try:
+		OutgoingBuffer = io.BytesIO()
+
+		# # #Make a phony avro-serialized packet content with a command
+		# PhonySchema = avro.schema.Parse(json.dumps({
+		# 	"namespace"		: "example.avro",
+		# 	"type"			: "record",
+		# 	"name"			: "User",
+		# 	"fields"		: [
+		# 		{"name": "name"				, "type": "string"},
+		# 		{"name": "favorite_number"	, "type": ["int", "null"]},
+		# 		{"name": "favorite_color"	, "type": ["string", "null"]},
+		# 	 	{"name":"Command","type":{"type":"enum",
+ 	# 										"name":"IbData.CommandType",
+ 	# 										# "name":"CommandType",
+ 	# 										# "namespace":"IbData",
+ 	# 										"symbols":["NotSpecified",
+ 	# 												"SetConnectionParameters",
+ 	# 												"ConnectToTws",
+ 	# 												"DisconnectFromTws"]}}
+		# 		# {"name": "Command"			, "type":
+		# 		# 		{"type":"enum",
+		# 		# 			"name":"IbData.CommandType",
+		# 		# 			"symbols":["NotSpecified",
+		# 		# 						"SetConnectionParameters",
+		# 		# 						"ConnectToTWS",
+		# 		# 						"DisconnectFromTWS"]}}
+		# 	]
+		# 	}))
+		# AvroSerializationBuffer = io.BytesIO()
+		# PhonyCommand = {'name': 'Eli', 'favorite_number': 42, 'favorite_color': 'black', 'Command': CommandType['NotSpecified'].name}
+		# writer = avro.datafile.DataFileWriter(AvroSerializationBuffer, avro.io.DatumWriter(), PhonySchema)
+
+
+		PhonyCommand = ControlCommandClass()
+		PhonyCommand.Command = CommandType['ConnectToTws'].name
+		# PhonyCommand = {'Command':CommandType['ConnectToTws'].name,
+		# 				'IntegerParameter':2,
+		# 				'IntegerParameter2':7438,
+		# 				'LongParameter':123,
+		# 				'DoubleParameter':2.0,
+		# 				'BoolParameter':True,
+		# 				'StringParameter':'Hi!',
+		# 				'MarketDataType':MarketDataTimingType['Live'].name}
+		AvroSerializationBuffer = io.BytesIO()
+		# writer = avro.datafile.DataFileWriter(AvroSerializationBuffer, avro.io.DatumWriter(), json.dumps(ControlCommandWriterSchema))
+		writer = avro.datafile.DataFileWriter(AvroSerializationBuffer, avro.io.DatumWriter(), ControlCommandWriterSchema)
+
+		# PhonySchema = avro.schema.Parse(json.dumps({
+		# 	"namespace"		: "example.avro",
+		# 	"type"			: "record",
+		# 	"name"			: "User",
+		# 	"fields"		: [
+		# 		{"name": "long"				, "type": "long"},
+		# 	 	{"name": "bool"				, "type": "boolean"},
+		# 	 	# {"name": "float"			, "type": "float"},
+		# 	 	{"name": "double"			, "type": "double"},
+		# 		{"name": "string"			, "type": "string"},
+		# 		{"name": "integer"			, "type": "int"}
+		# 	]
+		# 	}))
+		# AvroSerializationBuffer = io.BytesIO()
+		# # PhonyCommand = {'string': 'STRING', 'integer': 42, 'long': 100, 'float': 1.0, 'bool': 1}
+		# PhonyCommand = {'long':123, 'bool':True, 'double':2.0, 'string': 'STRING', 'integer': 42}
+		# writer = avro.datafile.DataFileWriter(AvroSerializationBuffer, avro.io.DatumWriter(), PhonySchema)
+
+		writer.append(PhonyCommand)
+		writer.flush()
+		AvroSerializationBuffer.seek(0)
+		PacketDataBuffer = io.BytesIO()
+		PacketDataBuffer = AvroSerializationBuffer.read()
+
+		# # TCP packet header for Status request
+		# PacketLengthBuffer = (16).to_bytes(8, byteorder='little')
+		# SessionTypeBuffer = (SessionType['StatusControl'].value).to_bytes(4, byteorder='little')
+		# PacketTaskBuffer = (PacketTask['ReadStatus'].value).to_bytes(4, byteorder='little')
+
+		# TCP packet header for 'ConnectToTws' command
+		PacketLengthBuffer = (16 + len(PacketDataBuffer)).to_bytes(8, byteorder='little')
+		SessionTypeBuffer = (SessionType['StatusControl'].value).to_bytes(4, byteorder='little')
+		PacketTaskBuffer = (PacketTask['ControlCommand'].value).to_bytes(4, byteorder='little')
+
+
+
+
+		# OutgoingBuffer = PacketLengthBuffer + SessionTypeBuffer + PacketTaskBuffer
+		OutgoingBuffer = PacketLengthBuffer + SessionTypeBuffer + PacketTaskBuffer + PacketDataBuffer
+
+		print("PacketDataBuffer: " + str(PacketDataBuffer))
+		# return
+
+		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		# print("connecting")
+		s.connect((DataTapIpAddress, DataTapIpPortNumber))
+		# print("sending")
+		s.send(OutgoingBuffer)
+		# print("updating GUI label")
+		# GuiMessageLabel.configure(text="Sent status request to IP address: " + str(DataTapIpAddress) + " using port: " + str(DataTapIpPortNumber))
+		# print("receiving")
+		PacketLength = s.recv(8)
+		print('PacketLength: ' + str(PacketLength))
+		ReceivedSessionType = s.recv(4)
+		print('SessionType: ' + str(ReceivedSessionType))
+		ReceivedPacketTask = s.recv(4)
+		print('PacketTask: ' + str(ReceivedPacketTask))
+		IncomingPacket = s.recv(1024)
+		print("IncomingPacket: ", str(IncomingPacket))
+		# IncomingAvro = IncomingPacket[16:]
+		IncomingAvro = IncomingPacket
+		# print("IncomingAvro: ", str(IncomingAvro))
+		ByteBufferAvro = io.BytesIO(IncomingAvro)
+		# print("making avro reader")
+		reader = avro.datafile.DataFileReader(ByteBufferAvro, avro.io.DatumReader())
+		# print("fetching reader contents")
+		for datum in reader:
+			print('datum: ' + str(datum))
+			print('datum[SubscriptionId]: ' + str(datum['SubscriptionId']))
+			# print('datum[DiagnosticInteger]: ' + str(datum['DiagnosticInteger']))
+			# print('datum[TswPortNumber]: ' + str(datum['TwsPortNumber']))
+		# print("closing reader")
+		reader.close()
+		# print("closing socket")
+		s.close()
+	except Exception as e:
+		print("Exception in GetDataTapStatus(): " + str(e))
 	else:
-		print("Local Status.")
+		print("try-else in GetDataTapStatus()")
+	finally:
+		print("try-finally in GetDataTapStatus()")
 
-	print ("Sending to IP address: " + str(IpAddress) + " using port: " + str(StatusPortNumber))
-
-	outgoingMessage = bytes([0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00])
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.connect((IpAddress, StatusPortNumber))
-	s.send(outgoingMessage)
-	incomingMessage = s.recv(1024)
-	s.close()
-	print ("sent: status request to " + IpAddress + ":" + str(StatusPortNumber) + ", received: ")
-	for incomingByte in incomingMessage:
-		print(format(incomingByte, '02x'), " ", end="")
-	print("")
-	print("...")
-
-def Boris(IpAddress):
-	if(DistantIpAddress == IpAddress):
-		print("Distant Boris.")
-	else:
-		print("Local Boris.")
-
-	print ("Sending to IP address: " + str(IpAddress) + " using port: " + str(BorisPortNumber))
-
-	outgoingMessage = "Boris?"
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.bind(("0.0.0.0", BorisPortNumber))
-	s.connect((IpAddress, BorisPortNumber))
-	s.send(outgoingMessage.encode())
-	incomingMessage = s.recv(1024).decode()
-	print ("sent: " + outgoingMessage + " to " + IpAddress + ":" + str(PortNumber) + ", received: " + incomingMessage)
-	s.close()
+def LogError(message):
+	print(message)
 
 if __name__ == '__main__':
 	Main()

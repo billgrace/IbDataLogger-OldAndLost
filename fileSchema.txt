@@ -1,0 +1,61 @@
+Exception in GetDataTapStatus(): The datum {'Command': 'ConnectToTWS', 'IntegerParameter': 2, 'IntegerParameter2': 7438, 'LongParameter': 123, 'DoubleParameter': 2.0, 'BoolParameter': True, 'StringParameter': 'Hi!', 'MarketDataType': 'Live'} is not an example of the schema {
+  "type": "record",
+  "name": "ControlCommand",
+  "namespace": "MarketData",
+  "fields": [
+    {
+      "type": {
+        "type": "enum",
+        "name": "CommandType",
+        "namespace": "IbData",
+        "symbols": [
+          "NotSpecified",
+          "SetConnectionParameters",
+          "ConnectToTws",
+          "DisconnectFromTws"
+        ]
+      },
+      "name": "Command"
+    },
+    {
+      "type": "int",
+      "name": "IntegerParameter"
+    },
+    {
+      "type": "int",
+      "name": "IntegerParameter2"
+    },
+    {
+      "type": "long",
+      "name": "LongParameter"
+    },
+    {
+      "type": "double",
+      "name": "DoubleParameter"
+    },
+    {
+      "type": "boolean",
+      "name": "BoolParameter"
+    },
+    {
+      "type": "string",
+      "name": "StringParameter"
+    },
+    {
+      "type": {
+        "type": "enum",
+        "name": "MarketDataTimingType",
+        "namespace": "IbData",
+        "symbols": [
+          "NotSpecified",
+          "Live",
+          "Frozen",
+          "Delayed",
+          "DelayedFrozen"
+        ]
+      },
+      "name": "MarketDataType"
+    }
+  ]
+}
+try-finally in GetDataTapStatus()

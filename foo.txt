@@ -1,0 +1,38 @@
+        PhonySchema = avro.schema.Parse(json.dumps({
+            "namespace"     : "example.avro",
+            "type"          : "record",
+            "name"          : "User",
+            "fields"        : [
+                {"name": "name"             , "type": "string"},
+                {"name": "favorite_number"  , "type": ["int", "null"]},
+                {"name": "favorite_color"   , "type": ["string", "null"]},
+                {"name":"Command","type":{"type":"enum",
+                                            "name":"IbData.CommandType",
+                                            "symbols":["NotSpecified",
+                                                    "SetConnectionParameters",
+                                                    "ConnectToTws",
+                                                    "DisconnectFromTws"]}}
+            ]
+            }))
+        AvroSerializationBuffer = io.BytesIO()
+        PhonyCommand = {'name': 'Eli', 'favorite_number': 42, 'favorite_color': 'black', 'Command': CommandType['NotSpecified'].name}
+
+
+        writer = avro.datafile.DataFileWriter(AvroSerializationBuffer, avro.io.DatumWriter(), PhonySchema)
+        writer.append(PhonyCommand)
+        writer.flush()
+        AvroSerializationBuffer.seek(0)
+        PacketDataBuffer = io.BytesIO()
+        PacketDataBuffer = AvroSerializationBuffer.read()
+
+        print("PacketDataBuffer: " + str(PacketDataBuffer))
+
+
+PacketDataBuffer: b'Obj\x01\x04\x14avro.codec\x08null\x16avro.schema\xae\x06{"type": "record", "name": "User", "namespace": "example.avro", "fields": [{"type": "string", "name": "name"}, {"type": ["int", "null"], "name": "favorite_number"}, {"type": ["string", "null"], "name": "favorite_color"}, {"type": {"type": "enum", "name": "CommandType", "namespace": "IbData", "symbols": ["NotSpecified", "SetConnectionParameters", "ConnectToTws", "DisconnectFromTws"]}, "name": "Command"}]}\x00\xff\xac\xc0 :\xd5\xe25~\xb1\xb4\xf71b?\xcf\x02\x1c\x06Eli\x00T\x00\nblack\x00\xff\xac\xc0 :\xd5\xe25~\xb1\xb4\xf71b?\xcf'
+
+PacketDataBuffer: b'Obj\x01\x04\x14avro.codec\x08null\x16avro.schema\xae\x06{"type": "record", "name": "User", "namespace": "example.avro",
+"fields": [{"type": "string", "name": "name"}, {"type": ["int", "null"], "name": "favorite_number"}, {"type": ["string", "null"], "name": "favorite_color"},
+{"type": {"type": "enum", "name": "CommandType", "namespace": "IbData", "symbols": ["NotSpecified", "SetConnectionParameters", "ConnectToTws", "DisconnectFromTws"]}, "name": "Command"}]}
+\x00\xff\xac\xc0 :\xd5\xe25~\xb1\xb4\xf71b?\xcf\x02\x1c\x06Eli\x00T\x00\nblack\x00\xff\xac\xc0 :\xd5\xe25~\xb1\xb4\xf71b?\xcf'
+
+PacketDataBuffer: b'Obj\x01\x04\x14avro.codec\x08null\x16avro.schema\xae\x06{"type": "record", "name": "User", "namespace": "example.avro", "fields": [{"type": "string", "name": "name"}, {"type": ["int", "null"], "name": "favorite_number"}, {"type": ["string", "null"], "name": "favorite_color"}, {"type": {"type": "enum", "name": "CommandType", "namespace": "IbData", "symbols": ["NotSpecified", "SetConnectionParameters", "ConnectToTws", "DisconnectFromTws"]}, "name": "Command"}]}\x00\xff\xac\xc0 :\xd5\xe25~\xb1\xb4\xf71b?\xcf\x02\x1c\x06Eli\x00T\x00\nblack\x00\xff\xac\xc0 :\xd5\xe25~\xb1\xb4\xf71b?\xcf'

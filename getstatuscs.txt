@@ -1,0 +1,106 @@
+        private void GetStatusReport()
+        {
+            IbData.IpSessionType typeOfThisSession = new IbData.IpSessionType();
+            IbData.IpPacketTask taskOfThisPacket = new IbData.IpPacketTask();
+            TcpClient client = new TcpClient();
+            try
+            {
+                client.Connect(IbIpAddressString, IbIpPortNumber);
+                NetworkStream stream = client.GetStream();
+                IbData.StatusReport status = new IbData.StatusReport();
+                MemoryStream StatusReportReturnBuffer = new MemoryStream();
+                try
+                {
+                    // To request a status report, we're not sending any data with the request
+                    long sizeOfDataToBeSent = 0;
+                    // Create a dummy byte buffer containing a long integer (placeholder for frame length parameter)
+                    long tokenFrameLength = 0;
+                    byte[] frameLengthParameterBuffer = BitConverter.GetBytes(tokenFrameLength);
+                    // Create a byte buffer containing the session type parameter
+                    typeOfThisSession = IbData.IpSessionType.StatusControl;
+                    byte[] sessionTypeParameterBuffer = BitConverter.GetBytes((int)typeOfThisSession);
+                    // Create a byte buffer containing the packet task parameter
+                    taskOfThisPacket = IbData.IpPacketTask.ReadStatus;
+                    byte[] packetTaskParameterbuffer = BitConverter.GetBytes((int)taskOfThisPacket);
+                    // Calculate the actual total frame length and make the real frame length parameter byte buffer
+                    long sizeOfFrameToSend = frameLengthParameterBuffer.Length + sessionTypeParameterBuffer.Length + packetTaskParameterbuffer.Length + sizeOfDataToBeSent;
+                    // Make a byte buffer sized for the entire frame to be sent
+                    byte[] outgoingBuffer = new byte[sizeOfFrameToSend];
+                    // Now that we have the actual entire frame length, replace the token with the real value
+                    frameLengthParameterBuffer = BitConverter.GetBytes(sizeOfFrameToSend);
+                    // Copy the frame length parameter, session type parameter and data buffer into the frame buffer
+                    frameLengthParameterBuffer.CopyTo(outgoingBuffer, 0);
+                    sessionTypeParameterBuffer.CopyTo(outgoingBuffer, frameLengthParameterBuffer.Length);
+                    packetTaskParameterbuffer.CopyTo(outgoingBuffer, frameLengthParameterBuffer.Length + sessionTypeParameterBuffer.Length);
+                    // Send the frame
+                    stream.Write(outgoingBuffer, 0, outgoingBuffer.Length);
+                }
+                catch (Exception ee)
+                {
+                    ErrorHandler(string.Format("Exception in GetStatusReport-1: {0}", ee.Message));
+                    return;
+                }
+                // Read incoming stream until we have the pre-pended length parameter
+                int currentTotalBytesReceived = 0;
+                int thisReadBytesReceived = 0;
+                long lengthOfEntireIncomingFrame = 0;
+                long lengthOfIncomingDataPacket = 0;
+                byte[] prependedLengthParameterBuffer = BitConverter.GetBytes(lengthOfIncomingDataPacket);
+                while (currentTotalBytesReceived < prependedLengthParameterBuffer.Length)
+                {
+                    thisReadBytesReceived = stream.Read(prependedLengthParameterBuffer, currentTotalBytesReceived, prependedLengthParameterBuffer.Length - currentTotalBytesReceived);
+                    currentTotalBytesReceived += thisReadBytesReceived;
+                }
+                lengthOfEntireIncomingFrame = BitConverter.ToInt64(prependedLengthParameterBuffer, 0);
+                // Read incoming stream until we have the session type parameter
+                currentTotalBytesReceived = 0;
+                byte[] embeddedSessionTypeBuffer = new byte[sizeof(IbData.IpSessionType)];
+                while (currentTotalBytesReceived < embeddedSessionTypeBuffer.Length)
+                {
+                    thisReadBytesReceived = stream.Read(embeddedSessionTypeBuffer, currentTotalBytesReceived, embeddedSessionTypeBuffer.Length - currentTotalBytesReceived);
+                    currentTotalBytesReceived += thisReadBytesReceived;
+                }
+                int sessionTypeInt = BitConverter.ToInt32(embeddedSessionTypeBuffer, 0);
+                typeOfThisSession = (IbData.IpSessionType)sessionTypeInt;
+                // Read incoming stream until we have the packet task parameter
+                currentTotalBytesReceived = 0;
+                byte[] embeddedPacketTaskBuffer = new byte[sizeof(IbData.IpPacketTask)];
+                while (currentTotalBytesReceived < embeddedPacketTaskBuffer.Length)
+                {
+                    thisReadBytesReceived = stream.Read(embeddedPacketTaskBuffer, currentTotalBytesReceived, embeddedPacketTaskBuffer.Length - currentTotalBytesReceived);
+                    currentTotalBytesReceived += thisReadBytesReceived;
+                }
+                int packetTaskInt = BitConverter.ToInt32(embeddedPacketTaskBuffer, 0);
+                taskOfThisPacket = (IbData.IpPacketTask)packetTaskInt;
+                // Read incoming stream until we have the data packet containing our status report
+                lengthOfIncomingDataPacket = lengthOfEntireIncomingFrame - prependedLengthParameterBuffer.Length - embeddedSessionTypeBuffer.Length - embeddedPacketTaskBuffer.Length;
+                byte[] incomingBuffer = new byte[lengthOfIncomingDataPacket];
+                currentTotalBytesReceived = 0;
+                while (currentTotalBytesReceived < lengthOfIncomingDataPacket)
+                {
+                    thisReadBytesReceived = stream.Read(incomingBuffer, currentTotalBytesReceived, incomingBuffer.Length - currentTotalBytesReceived);
+                    currentTotalBytesReceived += thisReadBytesReceived;
+                }
+                // Deserialize the status report
+                StatusReportReturnBuffer.Seek(0, SeekOrigin.Begin);
+                StatusReportReturnBuffer.Write(incomingBuffer, 0, incomingBuffer.Length);
+                try
+                {
+                    var avroStatusSerializer = AvroSerializer.Create<IbData.StatusReport>();
+                    StatusReportReturnBuffer.Seek(0, SeekOrigin.Begin);
+                    status = avroStatusSerializer.Deserialize(StatusReportReturnBuffer);
+                }
+                catch (Exception ee)
+                {
+                    ErrorHandler(string.Format("Exception in GetStatusReport-2: {0}", ee.Message));
+                    return;
+                }
+                myStatusReport = status;
+                stream.Close();
+                client.Close();
+            }
+            catch (Exception ee)
+            {
+                ErrorHandler(string.Format("Exception in GetStatusReport-3: {0}", ee.Message));
+            }
+        }
